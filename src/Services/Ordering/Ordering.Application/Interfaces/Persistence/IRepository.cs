@@ -14,7 +14,7 @@ namespace Ordering.Application.Interfaces.Persistence
 
         Task<T> GetById(long id);
         Task<T> Add(T entity);
-        Task UpdateAsync(T entity);
-        Task DeleteAsync(T entity);
+        Task Update(T entity);
+        Task Delete(T entity);
     }
 }
