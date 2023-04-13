@@ -1,7 +1,11 @@
 ﻿using System.Net;
+using AutoMapper;
 using Basket.API.Entities;
 using Basket.API.GrpsServices;
+using Basket.API.Models;
 using Basket.API.Repositories.Interfaces;
+using EventBus.Messages.Events;
+using MassTransit;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Basket.API.Controllers
@@ -11,11 +15,16 @@ namespace Basket.API.Controllers
     public class BasketController : ControllerBase
     {
         private readonly IBasketRepository _repository;
+        private readonly IMapper _mapper;
+        private readonly IPublishEndpoint _publishEndpoint;
         private readonly DiscountGrpcService _discountGrpcService;
 
-        public BasketController(IBasketRepository repository, DiscountGrpcService discountGrpcService)
+        public BasketController(IBasketRepository repository, IMapper mapper,
+            IPublishEndpoint publishEndpoint, DiscountGrpcService discountGrpcService)
         {
             _repository = repository;
+            _mapper = mapper;
+            _publishEndpoint = publishEndpoint;
             _discountGrpcService = discountGrpcService;
         }
 
@@ -45,6 +54,25 @@ namespace Basket.API.Controllers
         {
             await _repository.Delete(userName);
             return Ok();
+        }
+
+        [HttpPost("checkout")]
+        [ProducesResponseType((int)HttpStatusCode.Accepted)]
+        [ProducesResponseType((int)HttpStatusCode.BadRequest)]
+        public async Task<IActionResult> BasketCheckout([FromBody] BasketCheckoutModel basketCheckout)
+        {
+            var basket = await _repository.Get(basketCheckout.UserName);
+            if (basket is null)
+            {
+                return BadRequest();
+            }
+
+            var eventMessage = _mapper.Map<BasketCheckoutEvent>(basketCheckout);
+            eventMessage.TotalPrice = basket.TotalPrice;
+            await _publishEndpoint.Publish(eventMessage);
+
+            await _repository.Delete(basket.UserName);
+            return Accepted();
         }
     }
 }
